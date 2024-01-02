@@ -1,5 +1,5 @@
 -module(clock). 
--export([start/1, get/1, startT/1, startTicker/2, timer/3, startTimer/3, timerDone/0, getTimer/1]).
+-export([start/1, get/1, startT/1, clock/3, clockTicker/3, ticker/2, startTicker/2, timer/3, startTimer/3, startTimer/2, timerDone/0, getTimer/1]).
 
 % clockWrong(Speed, Pause, Time) -> 
 %     receive
@@ -33,11 +33,12 @@ clock(Speed, Pause, Time) ->
     end.
 
 clockTicker(TPid, Pause, Time) -> 
+    %io:format("ClockTicker ~p", [self()]),
     receive
-        {set, Value} -> clock(TPid, Pause, Value);
-        {get, Pid} -> Pid!{clock, Time}, clock(TPid, Pause, Time);
-        pause -> clock(TPid, true, Time);
-        resume -> clock(TPid, false, Time);
+        {set, Value} -> clockTicker(TPid, Pause, Value);
+        {get, Pid} -> Pid!{clock, Time}, clockTicker(TPid, Pause, Time);
+        pause -> clockTicker(TPid, true, Time);
+        resume -> clockTicker(TPid, false, Time);
         stop -> ok;
         {setTicker, Pid} ->
             case TPid of
@@ -47,8 +48,8 @@ clockTicker(TPid, Pause, Time) ->
         %Durch TPid garantiert, dass nur der eigene Ticker-Subprozess beachtet wird.
         {tick, TPid} -> 
             case Pause of
-                true -> clock(TPid, Pause, Time);
-                false -> clock(TPid, Pause, Time + 1)
+                true -> clockTicker(TPid, Pause, Time);
+                false -> clockTicker(TPid, Pause, Time + 1)
             end
     end.
 
@@ -63,7 +64,7 @@ ticker(Speed, Pid) ->
 startTicker(Speed, Pid) -> spawn(?MODULE, ticker, [Speed, Pid]).
 start(Speed) -> spawn(?MODULE, clock, [Speed, false, 0]).
 %startT(Speed) -> CT = spawn(?MODULE, clockTicker, [startTicker(Speed, CT), true, 0]), CT.
-startT(Speed) -> CT = spawn(?MODULE, clockTicker, [undefined, true, 0]),timer:sleep(100) , CT!{setTicker, startTicker(Speed, CT)}.
+startT(Speed) -> io:format("Main ~p", [self()]), CT = spawn(?MODULE, clockTicker, [undefined, false, 0]),timer:sleep(2000), T = startTicker(Speed, CT), io:format("Ticker ~p", [T]), CT!{setTicker, T}, CT.
 
 get(Pid) ->
     Pid!{get, self()},
@@ -86,14 +87,15 @@ timer(TPid, Time, Func) ->
             end
     end.
 
-startTimer(Speed, Time, Func) -> CT = spawn(?MODULE, timer, [undefined, Time, Func]), timer:sleep(100), CT!{setTicker, startTicker(Speed, CT)}.
+startTimer(Speed, Time, Func) -> CT = spawn(?MODULE, timer, [undefined, Time, Func]), T = startTicker(Speed, CT), CT!{setTicker, T}, CT.
+%startTimer(Speed, Time) -> CT = spawn(?MODULE, timer, [undefined, Time, timerDone]), T = startTicker(Speed, CT), CT!{setTicker, T}, CT.   %Geht so nicht!
 
-timerDone() -> "Timer ist fertig!".
+timerDone() -> io:format("Timer ist fertig!\n").
+%func1 = fun io:format("Timer ist fertig!") end.
+
+% Für den korrekten Aufruf in der Konsole: A = clock:startTimer(10, 1000, fun clock:timerDone/0).
 
 getTimer(Pid) ->
     Pid!{get, self()},
     receive {timerI, Value} -> Value end.
 
-
-
-%register(globalClock, start, [10]).
